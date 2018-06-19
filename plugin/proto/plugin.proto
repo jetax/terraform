@@ -199,10 +199,10 @@ message ImportResourceState {
 message ReadDataSource {
     message Request {
         string data_source_name = 1;
-        DynamicValue request = 2;
+        DynamicValue config = 2;
     }
     message Response {
-        DynamicValue result = 1;
+        DynamicValue state = 1;
         repeated Diagnostic diagnostics = 3;
     }
 }
