@@ -1,6 +1,7 @@
 package types
 
 import (
+	"github.com/hashicorp/terraform/addrs"
 	"github.com/hashicorp/terraform/config/configschema"
 	"github.com/hashicorp/terraform/tfdiags"
 	"github.com/zclconf/go-cty/cty"
@@ -65,107 +66,206 @@ type Provider interface {
 }
 
 type GetSchemaResponse struct {
-	Provider      *configschema.Block
+	// Provider is the schema for the provider itself.
+	Provider *configschema.Block
+
+	// ResourceTypes map the resource type name to that type's schema.
 	ResourceTypes map[string]*configschema.Block
-	DataSources   map[string]*configschema.Block
-	Diagnostics   tfdiags.Diagnostics
+
+	// DataSources maps the data source name to that data source's schema.
+	DataSources map[string]*configschema.Block
+
+	// Diagnostics contains any warnings or errors from the method call.
+	Diagnostics tfdiags.Diagnostics
 }
 
 type ValidateProviderConfigRequest struct {
+	// Config is the complete configuration value for the provider.
 	Config cty.Value
 }
 
 type ValidateProviderConfigResponse struct {
+	// Diagnostics contains any warnings or errors from the method call.
 	Diagnostics tfdiags.Diagnostics
 }
 
 type ValidateResourceTypeConfigRequest struct {
-	Name   string
+	// TypeName is the name of the resource type to validate.
+	TypeName string
+
+	// Config is the configuration value to validate, which may contain unknown
+	// values.
 	Config cty.Value
 }
 
 type ValidateResourceTypeConfigResponse struct {
+	// Diagnostics contains any warnings or errors from the method call.
 	Diagnostics tfdiags.Diagnostics
 }
 
 type ValidateDataSourceConfigRequest struct {
-	Name   string
+	// TypeName is the name of the data source type to validate.
+	TypeName string
+
+	// Config is the configuration value to validate, which may contain unknown
+	// values.
 	Config cty.Value
 }
 
 type ValidateDataSourceConfigResponse struct {
+	// Diagnostics contains any warnings or errors from the method call.
 	Diagnostics tfdiags.Diagnostics
 }
 
 type UpgradeResourceStateRequest struct {
-	Name    string
+	// TypeName is the name of the resource type being upgraded
+	TypeName string
+
+	// Version is version of the schema that created the current state.
 	Version int
-	state   cty.Value
+
+	// PriorStateRaw is the state that needs to be upgraded to match the current
+	// schema version. Because the schema is unknown, this contains only the
+	// raw bytes as stored in the state. It is up to the provider to interpret
+	// the payload and return a state encoded with the current schema.
+	PriorStateRaw []byte
 }
 
 type UpgradeResourceStateResponse struct {
-	State       cty.Value
+	// State is the newly upgraded resource state.
+	State cty.Value
+
+	// Diagnostics contains any warnings or errors from the method call.
 	Diagnostics tfdiags.Diagnostics
 }
 
 type ConfigureRequest struct {
+	// Config is the complete configuration value for the provider.
 	Config cty.Value
 }
 
 type ConfigureResponse struct {
+	// Diagnostics contains any warnings or errors from the method call.
 	Diagnostics tfdiags.Diagnostics
 }
 
 type ReadResourceRequest struct {
-	Name       string
+	// TypeName is the name of the resource type being read.
+	TypeName string
+
+	// PriorState contains the previously saved state value for this resource.
 	PriorState cty.Value
 }
 
 type ReadResourceResponse struct {
-	NewState    cty.Value
+	// NewState contains the current state of the resource.
+	NewState cty.Value
+
+	// Diagnostics contains any warnings or errors from the method call.
 	Diagnostics tfdiags.Diagnostics
 }
 
 type PlanResourceChangeRequest struct {
-	Name         string
-	PriorState   cty.Value
+	// TypeName is the name of the resource type to plan.
+	TypeName string
+
+	// PriorState is the previously saved state value for this resource.
+	PriorState cty.Value
+
+	// ProposedNewState is the expected state after the new configuration is
+	// applied. This is created by directly applying the configuration to the
+	// PriorState. The provider is then responsible for applying any further
+	// changes required to create the proposed final state.
+	ProposedNewState cty.Value
+
+	// PriorPrivate is the previously saved private data returned from the
+	// provider during the last apply.
 	PriorPrivate []byte
 }
 
 type PlanResourceChangeResponse struct {
-	PlannedState   cty.Value
+	// PlannedState is the expected state of the resource once the current
+	// configuration is applied.
+	PlannedState cty.Value
+
+	// RequiresReplace is a list of resources that will be replaces by this
+	// change.
+	RequiresReplace []addrs.Resource
+
+	// PlannedPrivate is an opaque blob that is not interpreted by terraform
+	// core. This will be saved and relayed back to the provider during
+	// ApplyResourceChange.
 	PlannedPrivate []byte
-	Diagnostics    tfdiags.Diagnostics
+
+	// Diagnostics contains any warnings or errors from the method call.
+	Diagnostics tfdiags.Diagnostics
 }
 
 type ApplyResourceChangeRequest struct {
-	Name           string
-	PriorState     cty.Value
-	PlannedState   cty.Value
+	// TypeName is the name of the resource type being applied.
+	TypeName string
+
+	// PriorState is the current state of resource.
+	PriorState cty.Value
+
+	// Planned state is the state returned from PlanResourceChange, and should
+	// represent the new state, minus any remaining computed attributes.
+	PlannedState cty.Value
+
+	// PlannedPrivate is the same value as returned by PlanResourceChange.
 	PlannedPrivate []byte
 }
 
 type ApplyResourceChangeResponse struct {
-	NewState    cty.Value
-	Private     []byte
+	// NewState is the new complete state after applying the planned change.
+	// In the event of an error, NewState should represent the most recent
+	// known state of the resource, if it exists.
+	NewState cty.Value
+
+	// Connection is a map of string values used to return any information
+	// provisioners might require to connect to the resource.
+	Connection map[string]string
+
+	// Private is an opaque blob that will be stored in state along with the
+	// resource. It is intended only for interpretation by the provider itself.
+	Private []byte
+
+	// Diagnostics contains any warnings or errors from the method call.
 	Diagnostics tfdiags.Diagnostics
 }
 
 type ImportResourceStateRequest struct {
-	Name string
-	ID   string
+	// TypeName is the name of the resource type to be imported.
+	TypeName string
+
+	// ID is a string with which the provider can identify the resource to be
+	// imported.
+	ID string
 }
 
 type ImportResourceStateResponse struct {
-	State       []cty.Value
+	// State contains one or more state values for the imported resource. It is
+	// not required that these be complete, only that there is enough
+	// identifying information for the provider to successfully update the
+	// state in ReadResource.
+	State []cty.Value
+
+	// Diagnostics contains any warnings or errors from the method call.
 	Diagnostics tfdiags.Diagnostics
 }
 
 type ReadDataSourceRequest struct {
-	Name string
+	// TypeName is the name of the data source type to Read.
+	TypeName string
+
+	// Config is the complete configuration for the requested data source.
+	Config cty.Value
 }
 
 type ReadDataSourceResponse struct {
-	State       cty.Value
+	// State is the current state of the requested data source.
+	State cty.Value
+
+	// Diagnostics contains any warnings or errors from the method call.
 	Diagnostics tfdiags.Diagnostics
 }
